@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-default-mode="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FBA Recover: find the money Amazon owes you before the claim window closes</title>
+    <meta name="description" content="Reconcile your FBA Inventory Ledger, reimbursements, returns, inbound shipments and fees. Find lost and damaged units never reimbursed, refunds never returned, short shipments and fee overcharges, with copy-ready case text and a deadline calendar." />
+    <meta name="theme-color" content="#232f3e" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23232f3e'/><text x='16' y='21' font-family='Arial,sans-serif' font-size='13' font-weight='700' text-anchor='middle' fill='white'>FR</text><rect x='8' y='24' width='16' height='2.4' rx='1.2' fill='%23ff9900'/></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search).get('mode')
+        var m = q === 'light' || q === 'dark' ? q : localStorage.getItem('themeMode')
+        document.documentElement.dataset.themeMode = m === 'light' || m === 'dark' ? m : document.documentElement.dataset.defaultMode
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
