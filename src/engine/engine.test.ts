@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { autoMap, detect, mergeData, parseCsv, parseDate, parseNum, validate } from './parse.ts'
+import { autoMap, detect, mergeData, parseCsv, parseDate, parseNum, reportCsv, validate } from './parse.ts'
 import { checkTable, dimWeight, fulfilmentFee, sizeTier, US_2026 } from './fees.ts'
 import { addDays, analyze, rank, reasonGroup, reconcileLedger } from './recon.ts'
 import { caseText, compareSnapshots, findingsCsv, snapshot } from './cases.ts'
@@ -280,4 +280,20 @@ test('the supplements sample is mostly refunds that never came back', () => {
   assert.ok(returns.length >= 20, `only ${returns.length}`)
   assert.ok(a.findings.some(f => f.kind === 'underpaid'))
   assert.ok((a.totals.byKind.return ?? 0) > (a.totals.byKind.lost ?? 0))
+})
+
+test('exported sample reports re-import to the same findings', () => {
+  const src = generate('hearth', AS_OF)
+  let back = emptyDataset()
+  for (const kind of ['ledger', 'reimbursements', 'returns', 'fees', 'txns', 'inbound', 'costs'] as const) {
+    const t = parseCsv(reportCsv(kind, src))
+    const d = detect(t)
+    assert.equal(d.kind, kind)
+    const v = validate(kind, t, autoMap(kind, t.rows[d.header]), d.header)
+    assert.equal(v.skipped, 0, `${kind}: ${v.issues[0]?.message}`)
+    back = mergeData(back, v.data)
+  }
+  const a = analyze(src, { asOf: AS_OF }), b = analyze(back, { asOf: AS_OF })
+  assert.equal(b.totals.open, a.totals.open)
+  assert.deepEqual(b.findings.map(f => f.id).sort(), a.findings.map(f => f.id).sort())
 })

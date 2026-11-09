@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { autoMap, detect, FIELDS, KINDS, mergeData, parseCsv, toCsv, validate, type Kind, type Mapping, type Table } from './engine/parse.ts'
+import { autoMap, detect, FIELDS, KINDS, mergeData, parseCsv, reportCsv, validate, type Kind, type Mapping, type Table } from './engine/parse.ts'
 import { DEFAULT_POLICY, POLICY_CHECKED, type Dataset, type Policy } from './engine/types.ts'
 import type { TabProps } from './Project.tsx'
 import { createBlankProject } from './projectData.ts'
@@ -9,18 +9,6 @@ import { ask, download, fmtDay, go, Link, toast } from './ui.tsx'
 
 interface Pending { id: string; name: string; kind: Kind | null; table: Table; header: number; map: Mapping }
 
-/** Writes a dataset slice back out with Seller Central column names, so the sample can be re-imported as a rehearsal. */
-export function reportCsv(kind: Kind, ds: Dataset): string {
-  switch (kind) {
-    case 'ledger': return toCsv([['Date', 'FNSKU', 'ASIN', 'MSKU', 'Title', 'Event Type', 'Reference ID', 'Quantity', 'Fulfillment Center', 'Disposition', 'Reason'], ...ds.ledger.map(r => [r.date, r.fnsku, r.asin ?? '', r.msku, r.title ?? '', r.event, r.ref, r.qty, r.fc ?? '', r.disposition ?? '', r.reason ?? ''])])
-    case 'reimbursements': return toCsv([['approval-date', 'reimbursement-id', 'case-id', 'amazon-order-id', 'reason', 'sku', 'fnsku', 'amount-per-unit', 'amount-total', 'quantity-reimbursed-cash', 'quantity-reimbursed-inventory', 'quantity-reimbursed-total'], ...ds.reimbursements.map(r => [r.date, r.id, r.caseId ?? '', r.orderId ?? '', r.reason, r.sku, r.fnsku, r.amountPerUnit, r.amountTotal, r.qtyCash, r.qtyInventory, r.qtyCash + r.qtyInventory])])
-    case 'returns': return toCsv([['return-date', 'order-id', 'sku', 'fnsku', 'quantity', 'detailed-disposition', 'reason', 'status'], ...ds.returns.map(r => [r.date, r.orderId, r.sku, r.fnsku, r.qty, r.disposition ?? '', r.reason ?? '', r.status ?? ''])])
-    case 'fees': return toCsv([['sku', 'fnsku', 'asin', 'product-name', 'your-price', 'longest-side', 'median-side', 'shortest-side', 'unit-of-dimension', 'item-package-weight', 'unit-of-weight', 'expected-fulfillment-fee-per-unit'], ...ds.fees.map(r => [r.sku, r.fnsku, r.asin ?? '', r.title ?? '', r.price, r.longest, r.median, r.shortest, 'inches', r.weightLb, 'pounds', r.expectedFee])])
-    case 'txns': return toCsv([['date/time', 'type', 'order id', 'sku', 'description', 'quantity', 'product sales', 'fba fees', 'other transaction fees', 'shipment id'], ...ds.txns.map(t => [t.date, t.type, t.orderId, t.sku, t.description ?? '', t.qty, t.principal, -t.fbaFee, -t.otherFee, t.shipmentId ?? ''])])
-    case 'inbound': return toCsv([['Shipment ID', 'Merchant SKU', 'FNSKU', 'Units expected', 'Units received', 'Last updated', 'Status'], ...ds.inbound.map(r => [r.shipmentId, r.sku, r.fnsku, r.shipped, r.received, r.date, r.status ?? ''])])
-    case 'costs': return toCsv([['sku', 'unit_cost', 'longest_side', 'median_side', 'shortest_side', 'weight_lb'], ...ds.costs.map(c => [c.sku, c.cost, c.longest ?? '', c.median ?? '', c.shortest ?? '', c.weightLb ?? ''])])
-  }
-}
 
 const KEY_OF: Record<Kind, keyof Dataset> = { ledger: 'ledger', reimbursements: 'reimbursements', returns: 'returns', fees: 'fees', txns: 'txns', inbound: 'inbound', costs: 'costs' }
 
