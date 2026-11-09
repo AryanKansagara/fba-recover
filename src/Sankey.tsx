@@ -88,11 +88,13 @@ export function Sankey({ f, width = 640, height = 300, compact = false }: { f: S
 
   const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
   const label = (n: Node, side: 'left' | 'right' | 'mid') => {
-    const tx = side === 'left' ? n.x + NW + 6 : side === 'right' ? n.x + NW + 8 : n.x + NW + 6
+    // Lost & damaged sits under "On hand", so its label goes on the left of the node.
+    const before = side === 'mid' && n.key === 'lost'
+    const tx = before ? n.x - 6 : side === 'right' ? n.x + NW + 8 : n.x + NW + 6
     const ty = n.y + n.h / 2
     const isUnre = n.key === 'unre'
     return (
-      <g key={'l' + n.key} className={`sk-label${isUnre ? ' leak' : ''}`}>
+      <g key={'l' + n.key} className={`sk-label${isUnre || before ? ' leak' : ''}`} textAnchor={before ? 'end' : 'start'}>
         <text x={tx} y={ty - (compact ? 1 : 3)} dominantBaseline="auto">{n.label}</text>
         <text x={tx} y={ty + (compact ? 11 : 13)} className="sk-v">{fmtN(n.v)}{isUnre && f.unitValue ? ` · ${money(n.v * f.unitValue)}` : ''}</text>
       </g>

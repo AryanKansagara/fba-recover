@@ -26,6 +26,13 @@ function Hero() {
   const skus = a.flows.filter(f => f.lost + f.damaged > 0).slice(0, 5)
   const [i, setI] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 600px)').matches)
+  useEffect(() => {
+    const mq = matchMedia('(max-width: 600px)')
+    const on = () => setNarrow(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   useEffect(() => {
     if (paused || matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const t = setInterval(() => setI(x => (x + 1) % skus.length), 6000)
@@ -45,7 +52,7 @@ function Hero() {
         {skus.map((s, k) => <button key={s.fnsku} type="button" role="tab" aria-selected={k === i} className={k === i ? 'on' : ''} onClick={() => { setI(k); setPaused(true) }}>{s.sku.replace(/^HL-/, '')}</button>)}
       </div>
       <div className="ledger-body">
-        <Sankey key={f.fnsku} f={f} width={640} height={290} />
+        {narrow ? <Sankey key={f.fnsku} f={f} width={380} height={300} compact /> : <Sankey key={f.fnsku} f={f} width={640} height={290} />}
       </div>
       <div className="ledger-foot">
         <div><small>Unreimbursed on this SKU</small><b className="leak-text">{fmtMoney(skuOpen)}</b></div>

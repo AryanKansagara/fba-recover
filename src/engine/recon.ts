@@ -266,7 +266,7 @@ export function analyze(ds: Dataset, opts: { policy?: Policy; table?: FeeTable; 
       units: missing, unitValue: per, amount: round2(per * missing), basis: x.amount ? 'refund amount' : val(x.sku).basis,
       eventDate: x.date, opens: addDays(x.date, policy.returnOpenDays), deadline: addDays(x.date, policy.returnCloseDays),
       refs: [x.orderId], lines: x.lines,
-      detail: `Order ${x.orderId} was refunded on ${x.date} for ${x.units} unit${x.units > 1 ? 's' : ''}; ${missing} never appear in FBA customer returns and were not reimbursed.`,
+      detail: `Order ${x.orderId} was refunded on ${x.date} for ${x.units} unit${x.units > 1 ? 's' : ''}; ${missing === x.units ? (missing > 1 ? 'none of them' : 'it') : `${missing} of them`} never showed up in FBA customer returns and ${missing > 1 ? 'were' : 'was'} not reimbursed.`,
       policy: `Customer return reimbursement: when a customer is refunded and the item is not returned to a fulfilment centre, Amazon reimburses the seller. Claims open ${policy.returnOpenDays} days after the refund and close ${policy.returnCloseDays} days after it.`,
       confidence: 'high',
     })
@@ -311,26 +311,29 @@ export function analyze(ds: Dataset, opts: { policy?: Policy; table?: FeeTable; 
     if (!dims) continue
     lines.sort((a, b) => a.date.localeCompare(b.date))
     let over = 0, overUnits = 0, missed = 0, first = ''
-    const used: number[] = []
+    const used: number[] = [], overCharged: number[] = []
     const charged = lines.map(t => round2(t.fbaFee / t.qty))
     for (const [i, t] of lines.entries()) {
       const exp = fulfilmentFee(dims, t.principal > 0 ? t.principal / t.qty : fp?.price ?? 20, t.date, table).fee
       const d = charged[i] - exp
       if (d <= policy.feeTolerance) continue
       if (addDays(t.date, policy.feeDays) < asOf) { missed += d * t.qty; continue }
-      over += d * t.qty; overUnits += t.qty; used.push(t.line)
+      over += d * t.qty; overUnits += t.qty; used.push(t.line); overCharged.push(charged[i])
       first ||= t.date
     }
     if (over <= 0 && missed <= 0) continue
     // Where did the charged fee step up? The first line whose fee is above the SKU's earliest fee by more than the tolerance.
     const step = charged.findIndex(x => x - charged[0] > policy.feeTolerance)
-    const sorted = [...charged].sort((a, b) => a - b), med = sorted[sorted.length >> 1]
-    const outliers = charged.filter(x => Math.abs(x - med) > med * 0.25).length
+    const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[s.length >> 1] ?? 0 }
+    const medOver = median(overCharged.length ? overCharged : charged)
+    // Outliers are judged within each fee regime (before and after the step), not across it.
+    const segs = step > 0 ? [charged.slice(0, step), charged.slice(step)] : [charged]
+    const outliers = segs.reduce((n, seg) => { const m = median(seg); return n + seg.filter(x => Math.abs(x - m) > m * 0.25).length }, 0)
     const trueTier = sizeTier(dims), amzTier = amazonDims ? sizeTier(amazonDims) : null
     const mis = trueDims && amazonDims && (trueTier !== amzTier || fulfilmentFee(amazonDims, 20, asOf, table).fee - fulfilmentFee(trueDims, 20, asOf, table).fee > policy.feeTolerance)
     const fmtD = (d: Dims) => `${d.longest.toFixed(1)} x ${d.median.toFixed(1)} x ${d.shortest.toFixed(1)} in, ${d.weightLb.toFixed(2)} lb`
     const detail = [
-      `Charged $${med.toFixed(2)} per unit (median) against an expected $${fulfilmentFee(dims, fp?.price ?? 20, asOf, table).fee.toFixed(2)} for ${TIER_LABEL[trueTier]} at ${fmtD(dims)}${trueDims ? ' (your measurements)' : ' (Amazon’s measurements, rate table check)'}.`,
+      `Charged $${medOver.toFixed(2)} per unit (median of the overcharged lines) against an expected $${fulfilmentFee(dims, fp?.price ?? 20, asOf, table).fee.toFixed(2)} for ${TIER_LABEL[trueTier]} at ${fmtD(dims)}${trueDims ? ' (your measurements)' : ' (Amazon’s measurements, rate table check)'}.`,
       mis && amazonDims ? `Amazon has the item as ${fmtD(amazonDims)} (${TIER_LABEL[amzTier!]}).` : '',
       step > 0 ? `The fee rose from $${charged[0].toFixed(2)} to $${charged[step].toFixed(2)} on ${lines[step].date}, which usually means a re-measurement.` : '',
       outliers ? `${outliers} order line${outliers > 1 ? 's' : ''} differ from the usual fee by more than 25%.` : '',
