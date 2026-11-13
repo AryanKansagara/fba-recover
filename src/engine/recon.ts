@@ -1,5 +1,5 @@
 // The reconciliation engine: ledger -> unresolved lost/damaged units -> reimbursement matching -> findings with $ and deadlines.
-import { fulfilmentFee, round2, sizeTier, TIER_LABEL, US_2026, type Dims, type FeeTable } from './fees.ts'
+import { fulfilmentFee, inPeak, round2, sizeTier, TIER_LABEL, US_2026, type Dims, type FeeTable } from './fees.ts'
 import { DEFAULT_POLICY, type Dataset, type Finding, type FindingKind, type LedgerRow, type Policy, type Reimbursement } from './types.ts'
 
 // ---------- Dates ----------
@@ -310,10 +310,11 @@ export function analyze(ds: Dataset, opts: { policy?: Policy; table?: FeeTable; 
     const dims = trueDims ?? amazonDims
     if (!dims) continue
     lines.sort((a, b) => a.date.localeCompare(b.date))
-    let over = 0, overUnits = 0, missed = 0, first = ''
+    let over = 0, overUnits = 0, missed = 0, first = '', peakUnits = 0
     const used: number[] = [], overCharged: number[] = []
     const charged = lines.map(t => round2(t.fbaFee / t.qty))
     for (const [i, t] of lines.entries()) {
+      if (inPeak(t.date, table)) { peakUnits += t.qty; continue }
       const exp = fulfilmentFee(dims, t.principal > 0 ? t.principal / t.qty : fp?.price ?? 20, t.date, table).fee
       const d = charged[i] - exp
       if (d <= policy.feeTolerance) continue
@@ -321,6 +322,7 @@ export function analyze(ds: Dataset, opts: { policy?: Policy; table?: FeeTable; 
       over += d * t.qty; overUnits += t.qty; used.push(t.line); overCharged.push(charged[i])
       first ||= t.date
     }
+    if (peakUnits) notes.push(`${sku}: ${peakUnits} unit${peakUnits > 1 ? 's' : ''} shipped in the holiday peak window were left out of the fee audit (peak rates are not in the fee table).`)
     if (over <= 0 && missed <= 0) continue
     // Where did the charged fee step up? The first line whose fee is above the SKU's earliest fee by more than the tolerance.
     const step = charged.findIndex(x => x - charged[0] > policy.feeTolerance)

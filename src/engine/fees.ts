@@ -27,6 +27,11 @@ export interface FeeTable {
   /** Percentage surcharge applied on top of the fulfilment fee from `surchargeFrom` */
   surchargePct: number
   surchargeFrom: string
+  /**
+   * Holiday peak window ("MM-DD", inclusive, may wrap the year end). Amazon charges higher peak fulfilment fees in it,
+   * which this table does not model, so the fee audit leaves those charges out. null turns the exclusion off.
+   */
+  peak?: { from: string; to: string } | null
   source: string
 }
 
@@ -57,6 +62,7 @@ export const US_2026: FeeTable = {
   highPriceAdj: 0.26,
   surchargePct: 3.5,
   surchargeFrom: '2026-04-17',
+  peak: { from: '10-15', to: '01-14' },
   source: 'Seller Central "FBA fulfillment fees" rate card, as summarised by public 2026 fee guides; checked 2026-11-08',
 }
 
@@ -92,6 +98,14 @@ export function fulfilmentFee(d: Dims, price: number, date: string, table: FeeTa
   return { tier, shippingLb: w, base: round2(base), fee: round2(fee) }
 }
 
+/** True when `date` (YYYY-MM-DD) falls in the table's holiday peak window. Tables saved before the field existed get the default. */
+export function inPeak(date: string, table: FeeTable): boolean {
+  const p = table.peak === undefined ? US_2026.peak : table.peak
+  if (!p) return false
+  const md = date.slice(5)
+  return p.from <= p.to ? md >= p.from && md <= p.to : md >= p.from || md <= p.to
+}
+
 export const round2 = (n: number) => Math.round(n * 100) / 100
 
 /** Throws with a readable message when a user-edited table is malformed. */
@@ -108,6 +122,7 @@ export function checkTable(t: unknown): FeeTable {
     }
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(x.surchargeFrom ?? '')) throw new Error('surchargeFrom must be a YYYY-MM-DD date.')
+  if (x.peak && !(/^\d{2}-\d{2}$/.test(x.peak.from ?? '') && /^\d{2}-\d{2}$/.test(x.peak.to ?? ''))) throw new Error('peak must be null or { "from": "MM-DD", "to": "MM-DD" }.')
   if (typeof x.surchargePct !== 'number' || typeof x.lowPriceAdj !== 'number' || typeof x.highPriceAdj !== 'number') throw new Error('surchargePct, lowPriceAdj and highPriceAdj must be numbers.')
   return x
 }

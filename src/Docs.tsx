@@ -56,6 +56,8 @@ export default function Docs() {
           <p className="small"><b>Columns used:</b> <span className="muted">{cols}</span> Names are matched loosely (case, spaces, dashes); anything else can be mapped by hand.</p>
         </div>
       ))}
+      <h3 id="formats">Layouts the importer is tested against</h3>
+      <p className="small">Checked 13 Nov 2026 against the column lists of the SP-API report types (<span className="mono">GET_LEDGER_DETAIL_VIEW_DATA</span>, <span className="mono">GET_FBA_REIMBURSEMENTS_DATA</span>, <span className="mono">GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA</span>, <span className="mono">GET_FBA_ESTIMATED_FBA_FEES_TXT_DATA</span>, <span className="mono">GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2</span>) as published in the open-source Airbyte Amazon Seller Partner connector (<a href="https://github.com/airbytehq/airbyte/tree/master/airbyte-integrations/connectors/source-amazon-seller-partner">github.com/airbytehq/airbyte</a>), plus the Seller Central date range transaction report. The test suite carries one file per layout: tab-separated reports, quoted CSV, the seven-line date range preamble, the settlement summary row, <span className="mono">--</span> placeholders in the Fee Preview, millimetre and kilogram units (EU), and camelCase headers from API exports. Values in those fixtures are invented.</p>
       <Code label="cost file example (CSV)" code={'sku,unit_cost,longest_side,median_side,shortest_side,weight_lb\nHL-BOARD-WAL,9.40,14.8,10.9,0.7,0.94\nHL-THROW-OAT,14.50,14,11,5,2.3\n'} />
 
       <h2 id="windows">Claim windows</h2>
@@ -82,7 +84,7 @@ export default function Docs() {
       <p>Every finding in the worklist has copy-ready case text with the FNSKU, dates, ledger reference IDs, the source rows and the policy reason. Paste it into Help › Get support › Selling on Amazon › FBA inventory issue (or Fees for fee findings), then log the case ID.</p>
 
       <h2 id="fees">Fee table</h2>
-      <p><b>{table.name}</b>, effective {fmtDay(table.effective)}, with a {table.surchargePct}% fuel and logistics surcharge from {fmtDay(table.surchargeFrom)}. Base rates are for items priced $10 to $50; under $10 adds {table.lowPriceAdj.toFixed(2)}, over $50 adds +{table.highPriceAdj.toFixed(2)} (standard size). Source: {table.source}. Amazon publishes the authoritative numbers in Seller Central; compare a few SKUs against the Revenue Calculator and edit the table in <Link href="/settings#fees">Settings</Link> if they differ.</p>
+      <p><b>{table.name}</b>, effective {fmtDay(table.effective)}, with a {table.surchargePct}% fuel and logistics surcharge from {fmtDay(table.surchargeFrom)}. Base rates are for items priced $10 to $50; under $10 adds {table.lowPriceAdj.toFixed(2)}, over $50 adds +{table.highPriceAdj.toFixed(2)} (standard size). {table.peak !== null && <> Charges shipped in the holiday peak window ({table.peak?.from ?? '10-15'} to {table.peak?.to ?? '01-14'}, month-day) are left out of the fee audit, because Amazon bills higher peak rates then that this table does not carry.</>} Source: {table.source}. Amazon publishes the authoritative numbers in Seller Central; compare a few SKUs against the Revenue Calculator and edit the table in <Link href="/settings#fees">Settings</Link> if they differ.</p>
       <div className="table-wrap"><table>
         <thead><tr><th>Tier</th><th>Limits</th><th>Fee from</th></tr></thead>
         <tbody>{(Object.keys(TIER_LABEL) as Tier[]).map(t => (

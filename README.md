@@ -11,14 +11,20 @@ FBA reimbursement windows are short (60 days for units lost or damaged in a fulf
 ## Features
 
 - **Import** the Inventory Ledger (detailed view), Reimbursements, FBA customer returns, Fee Preview, Settlement (Flat File V2 or the date range transaction report), Shipment items, and an optional COGS file. Report detection, flexible column mapping and a validation report with line numbers. Overlapping exports do not double count.
-- **Engine** (plain TypeScript, 29 tests): per-FNSKU ledger reconciliation by reason code with found adjustments offsetting the oldest losses; reimbursement matching by date proximity (cash and inventory, reversals); refunds never returned; inbound shortfalls; reimbursements paid below cost; a dated, editable US fee table (size tier from dimensions and weight, price bands, surcharge) that flags re-measurements and dates the change; fees charged on units not received.
+- **Engine** (plain TypeScript, 38 tests, including one fixture per real Seller Central / SP-API report layout): per-FNSKU ledger reconciliation by reason code with found adjustments offsetting the oldest losses; reimbursement matching by date proximity (cash and inventory, reversals); refunds never returned; inbound shortfalls; reimbursements paid below cost; a dated, editable US fee table (size tier from dimensions and weight, price bands, surcharge) that flags re-measurements and dates the change; fees charged on units not received.
 - **Actions:** a case worklist ranked by dollars per day left, copy-ready case text with the FNSKU, dates, ledger references and policy reason, a status tracker (draft, filed, case ID, reimbursed, denied), a deadline calendar, a printable monthly recovery report and a CSV export.
 - **History:** monthly snapshots with a compare view (found against recovered).
 - **Hero:** a live per-SKU ledger Sankey (received to sold, on hand, lost; lost to found, reimbursed, unreimbursed) running on the real engine, with a deadline countdown.
 - Local-first (IndexedDB). Optional email sign-in syncs sellers, case status and snapshots across devices.
 - Two synthetic sample sellers, labelled as such.
 
-Claim windows and fee rates are dated estimates (checked November 2026) and editable; confirm them in Seller Central before filing.
+Claim windows and fee rates are dated estimates (checked November 2026) and editable; confirm them in Seller Central before filing. Charges in the holiday peak window (Oct 15 to Jan 14) are left out of the fee audit because the table carries non-peak rates only.
+
+## Known gaps
+
+- Fee table values come from public summaries that do not all agree; check a few SKUs against the Revenue Calculator.
+- Dates written day-first (31/10/2026, some EU exports) are not detected; only US month-first and ISO dates are read for slash dates.
+- The SP-API inbound shipment items export has no date column; map one by hand (or use the Seller Central shipment export).
 
 ## Run locally
 

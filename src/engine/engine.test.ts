@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { autoMap, detect, mergeData, parseCsv, parseDate, parseNum, reportCsv, validate } from './parse.ts'
-import { checkTable, dimWeight, fulfilmentFee, sizeTier, US_2026 } from './fees.ts'
+import { checkTable, dimWeight, fulfilmentFee, inPeak, sizeTier, US_2026 } from './fees.ts'
 import { addDays, analyze, rank, reasonGroup, reconcileLedger } from './recon.ts'
 import { caseText, compareSnapshots, findingsCsv, snapshot } from './cases.ts'
 import { generate } from './sample.ts'
@@ -213,13 +213,28 @@ test('reimbursements below cost are flagged with the gap', () => {
 test('fee audit catches a re-measured SKU and dates the step', () => {
   const trueDims = { longest: 14.8, median: 10.9, shortest: 0.7, weightLb: 0.94 }
   const wrong = { longest: 15.2, median: 11.1, shortest: 1.3, weightLb: 1.08 }
-  const txns = ['2026-09-01', '2026-09-20', '2026-10-01', '2026-10-15'].map((date, i) => ({ date, type: 'Order', orderId: `O${i}`, sku: 'SKU1', qty: 1, principal: 30, fbaFee: fulfilmentFee(i < 2 ? trueDims : wrong, 30, date).fee, otherFee: 0, line: n++ }))
+  const txns = ['2026-09-01', '2026-09-20', '2026-10-01', '2026-10-10'].map((date, i) => ({ date, type: 'Order', orderId: `O${i}`, sku: 'SKU1', qty: 1, principal: 30, fbaFee: fulfilmentFee(i < 2 ? trueDims : wrong, 30, date).fee, otherFee: 0, line: n++ }))
   const a = analyze({ ...emptyDataset(), txns, costs: [{ sku: 'SKU1', cost: 9, ...trueDims, line: 2 }], fees: [{ sku: 'SKU1', fnsku: 'X001', price: 30, ...wrong, expectedFee: 0, line: 2 }] }, { asOf: AS_OF })
   const f = a.findings.find(x => x.kind === 'fee')!
   assert.equal(f.units, 2)
   assert.equal(f.confidence, 'high')
   assert.equal(f.refs[0], 'fee change 2026-10-01')
   assert.equal(f.amount, Math.round((fulfilmentFee(wrong, 30, '2026-10-01').fee - fulfilmentFee(trueDims, 30, '2026-10-01').fee) * 2 * 100) / 100)
+})
+
+test('fee audit leaves holiday peak charges out instead of calling them overcharges', () => {
+  const dims = { longest: 10, median: 6, shortest: 2, weightLb: 0.9 }
+  const fee = fulfilmentFee(dims, 25, '2026-10-01').fee
+  // Peak fees are higher; a +$0.40 charge inside Oct 15 - Jan 14 is expected, outside it is an overcharge.
+  const txns = ['2026-10-10', '2026-10-20', '2026-12-30', '2027-01-03'].map((date, i) => ({ date, type: 'Order', orderId: `P${i}`, sku: 'SKU1', qty: 1, principal: 25, fbaFee: fee + 0.4, otherFee: 0, line: n++ }))
+  const a = analyze({ ...emptyDataset(), txns, fees: [{ sku: 'SKU1', fnsku: 'X001', price: 25, ...dims, expectedFee: 0, line: 2 }] }, { asOf: '2027-01-05' })
+  const f = a.findings.find(x => x.kind === 'fee')!
+  assert.equal(f.units, 1)
+  assert.equal(f.eventDate, '2026-10-10')
+  assert.ok(a.notes.some(x => /3 units shipped in the holiday peak/.test(x)))
+  assert.equal(inPeak('2026-10-14', US_2026), false)
+  assert.equal(inPeak('2027-01-14', US_2026), true)
+  assert.equal(inPeak('2026-12-01', { ...US_2026, peak: null }), false)
 })
 
 test('placement fees charged on units never received are refunded per unit', () => {
