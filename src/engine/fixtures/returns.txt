@@ -1,0 +1,2 @@
+return-date	order-id	sku	asin	fnsku	product-name	quantity	fulfillment-center-id	detailed-disposition	reason	status	license-plate-number	customer-comments
+2026-10-01T09:44:18+00:00	113-4402917-5517038	BB-CUT-3PC	B0CQ8T2M4N	X003QW7K2L	Bamboo Cutting Board Set, 3 Pieces with Juice Groove	1	LAS1	SELLABLE	UNWANTED_ITEM	Unit returned to inventory	LPNRR9182736455	Bought the wrong size

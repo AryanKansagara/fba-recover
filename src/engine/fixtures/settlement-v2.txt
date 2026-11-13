@@ -1,0 +1,10 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+18394027561	2026-09-01 07:00:00 UTC	2026-09-15 07:00:00 UTC	2026-09-17 07:00:00 UTC	1028.44	USD																		
+18394027561						Order	113-4402917-5517038			DkQ3bL7Mn	Amazon.com	ItemPrice	Principal	34.99	AFN	2026-09-05	2026-09-05 10:10:02 UTC	04938217465530			BB-CUT-3PC	1	
+18394027561						Order	113-4402917-5517038			DkQ3bL7Mn	Amazon.com	ItemPrice	Tax	2.89	AFN	2026-09-05	2026-09-05 10:10:02 UTC	04938217465530			BB-CUT-3PC	1	
+18394027561						Order	113-4402917-5517038			DkQ3bL7Mn	Amazon.com	ItemWithheldTax	MarketplaceFacilitatorTax-Principal	-2.89	AFN	2026-09-05	2026-09-05 10:10:02 UTC	04938217465530			BB-CUT-3PC	1	
+18394027561						Order	113-4402917-5517038			DkQ3bL7Mn	Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-7.89	AFN	2026-09-05	2026-09-05 10:10:02 UTC	04938217465530			BB-CUT-3PC	1	
+18394027561						Order	113-4402917-5517038			DkQ3bL7Mn	Amazon.com	ItemFees	Commission	-5.25	AFN	2026-09-05	2026-09-05 10:10:02 UTC	04938217465530			BB-CUT-3PC	1	
+18394027561						Refund	114-9918264-0031544		amzn1.sa.38f1		Amazon.com	ItemPrice	Principal	-34.99	AFN	2026-09-08	2026-09-08 16:44:51 UTC	55120938471266			BB-CUT-3PC		
+18394027561						Refund	114-9918264-0031544		amzn1.sa.38f1		Amazon.com	ItemFees	RefundCommission	1.05	AFN	2026-09-08	2026-09-08 16:44:51 UTC	55120938471266			BB-CUT-3PC		
+18394027561						other-transaction				FBA18Z4KQW2P		other-transaction	FBA Inbound Placement Service Fee	-14.40		2026-09-03	2026-09-03 01:00:00 UTC						

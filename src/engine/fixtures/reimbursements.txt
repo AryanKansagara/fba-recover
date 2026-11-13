@@ -1,0 +1,4 @@
+approval-date	reimbursement-id	case-id	amazon-order-id	reason	sku	fnsku	asin	product-name	condition	currency-unit	amount-per-unit	amount-total	quantity-reimbursed-cash	quantity-reimbursed-inventory	quantity-reimbursed-total	original-reimbursement-id	original-reimbursement-type
+2026-09-30T07:15:52+00:00	5219873301			Lost_Warehouse	BB-CUT-3PC	X003QW7K2L	B0CQ8T2M4N	Bamboo Cutting Board Set, 3 Pieces with Juice Groove	New	USD	11.42	11.42	1	0	1		
+2026-10-02T07:15:52+00:00	5221004418			Damaged_Inbound	BB-CUT-3PC	X003QW7K2L	B0CQ8T2M4N	Bamboo Cutting Board Set, 3 Pieces with Juice Groove	New	USD	11.42	11.42	1	0	1		
+2026-10-20T07:15:52+00:00	5230177652		114-9918264-0031544	CustomerReturn	BB-CUT-3PC	X003QW7K2L	B0CQ8T2M4N	Bamboo Cutting Board Set, 3 Pieces with Juice Groove	New	USD	0	0	0	1	1		

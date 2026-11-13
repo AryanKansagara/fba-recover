@@ -163,7 +163,7 @@ export const FIELDS: Record<Kind, FieldSpec[]> = {
     f('dimUnit', 'unit-of-dimension', 'text', ['unit_of_dimension', 'dimension_unit']),
     f('weight', 'item-package-weight', 'num', ['item_package_weight', 'weight', 'package_weight'], true),
     f('weightUnit', 'unit-of-weight', 'text', ['unit_of_weight', 'weight_unit']),
-    f('tier', 'product-size-tier', 'text', ['product_size_tier', 'size_tier']),
+    f('tier', 'product-size-tier', 'text', ['product_size_tier', 'product_size_weight_band', 'size_tier']),
     f('expectedFee', 'expected-fulfillment-fee-per-unit', 'num', ['expected_fulfillment_fee_per_unit', 'expected_domestic_fulfilment_fee_per_unit', 'expected_domestic_fulfillment_fee_per_unit', 'estimated_fulfillment_fee']),
   ],
   txns: [
@@ -183,8 +183,8 @@ export const FIELDS: Record<Kind, FieldSpec[]> = {
   ],
   inbound: [
     f('shipmentId', 'Shipment ID', 'text', ['shipment_id', 'fba_shipment_id'], true),
-    f('sku', 'Merchant SKU', 'text', ['merchant_sku', 'sku', 'msku']),
-    f('fnsku', 'FNSKU', 'text', ['fnsku'], true),
+    f('sku', 'Merchant SKU', 'text', ['merchant_sku', 'sku', 'msku', 'seller_sku']),
+    f('fnsku', 'FNSKU', 'text', ['fnsku', 'fulfillment_network_sku'], true),
     f('shipped', 'Units shipped', 'num', ['quantity_shipped', 'units_shipped', 'units_expected', 'shipped', 'expected'], true),
     f('received', 'Units received', 'num', ['quantity_received', 'units_received', 'received'], true),
     f('date', 'Closed / updated date', 'date', ['closed_date', 'last_updated', 'last_updated_date', 'date', 'shipment_date', 'created_date'], true),
@@ -200,7 +200,8 @@ export const FIELDS: Record<Kind, FieldSpec[]> = {
   ],
 }
 
-export const norm = (h: string) => h.trim().toLowerCase().replace(/^"|"$/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+// camelCase headers (SP-API and some connectors: "EventType", "SellerSKU") split into words first.
+export const norm = (h: string) => h.trim().replace(/([a-z])([A-Z])/g, '$1_$2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2').toLowerCase().replace(/^"|"$/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 
 const SIGNATURES: [Kind, string[]][] = [
   ['ledger', ['event_type', 'fnsku']],
@@ -214,9 +215,8 @@ const SIGNATURES: [Kind, string[]][] = [
   ['txns', ['fba_fees']],
   ['txns', ['settlement_id']],
   ['inbound', ['shipment_id', 'fnsku']],
+  ['inbound', ['shipment_id', 'fulfillment_network_sku']],
   ['costs', ['cost']],
-  ['costs', ['unit_cost']],
-  ['costs', ['cogs']],
 ]
 
 /** Finds the header row (the date range report has a preamble) and the report kind. */
@@ -250,7 +250,9 @@ export interface Validated { kind: Kind; data: Partial<Dataset>; count: number; 
 type Rec = Record<string, string | number>
 
 const LEDGER_EVENTS = ['receipts', 'shipments', 'customerreturns', 'adjustments', 'whsetransfers', 'vendorreturns']
-const toInches = (n: number, unit: string) => /cent|cm/i.test(unit) ? n / 2.54 : n
+const toInches = (n: number, unit: string) => /cent|cm/i.test(unit) ? n / 2.54 : /milli|^mm$/i.test(unit) ? n / 25.4 : n
+/** Seller Central writes "--" or "N/A" where a value does not apply (no sale price, item not measured yet). */
+const NULLISH = /^(--|-|n\/a|null|none)$/i
 const toLb = (n: number, unit: string) => /gram|^g$/i.test(unit) ? n / 453.592 : /kilo|kg/i.test(unit) ? n * 2.20462 : /ounce|oz/i.test(unit) ? n / 16 : n
 
 /** Maps and validates the data rows below `header`. Line numbers are the file's own (1-based). */
@@ -266,11 +268,17 @@ export function validate(kind: Kind, t: Table, map: Mapping, header = 0): Valida
   }
   for (let i = header + 1; i < t.rows.length; i++) {
     const row = t.rows[i], line = t.lines[i]
+    // Settlement flat files open with a summary row (settlement id, period, total) that has no transaction type.
+    if (kind === 'txns' && map.amountDescription !== undefined && !(row[map.type] ?? '').trim()) {
+      issues.push({ line, level: 'warning', message: 'Settlement summary row (period and total), not a transaction; ignored.' })
+      continue
+    }
     const r: Rec = {}
     let bad = ''
     for (const s of specs) {
       const col = map[s.key]
-      const raw = col === undefined ? '' : (row[col] ?? '').trim()
+      const cell = col === undefined ? '' : (row[col] ?? '').trim()
+      const raw = s.type !== 'text' && NULLISH.test(cell) ? '' : cell
       if (s.type === 'text') r[s.key] = raw
       else if (s.type === 'date') {
         const d = raw ? parseDate(raw) : ''
