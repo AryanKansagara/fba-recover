@@ -49,12 +49,14 @@ export default function Report({ id }: { id: string }) {
       </table>
 
       <h2>File these first</h2>
+      <div className="table-wrap">
       <table>
         <thead><tr><th>#</th><th>Type</th><th>SKU / FNSKU</th><th>Event</th><th className="num">Units</th><th className="num">Amount</th><th>Deadline</th><th>Status</th></tr></thead>
         <tbody>{open.slice(0, 25).map((f, i) => (
           <tr key={f.id}><td>{i + 1}</td><td>{KIND_LABEL[f.kind]}</td><td><span className="mono">{f.sku}</span>{f.fnsku && <small className="muted block">{f.fnsku}</small>}</td><td className="small">{fmtDay(f.eventDate)}{f.refs[0] ? <small className="muted block">{f.refs[0]}</small> : null}</td><td className="num">{f.units}</td><td className="num">{fmtMoney(f.amount, 2)}</td><td className="small">{fmtDay(f.deadline)}<small className="muted block">{daysBetween(a.asOf, f.deadline)} days</small></td><td className="small">{project.cases[f.id]?.status ?? 'not started'}{project.cases[f.id]?.caseId ? ` #${project.cases[f.id].caseId}` : ''}</td></tr>
         ))}</tbody>
       </table>
+      </div>
       {open.length > 25 && <p className="muted small">{open.length - 25} more in the worklist and the CSV export.</p>}
 
       <h2>Cases awaiting Amazon</h2>
