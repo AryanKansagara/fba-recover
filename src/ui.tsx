@@ -290,7 +290,7 @@ export function Footer() {
       <div className="footer-inner">
         <div className="footer-brand"><Monogram /> <strong>FBA Recover</strong></div>
         <nav className="footer-nav" aria-label="Footer"><Link href="/app">Sellers</Link><Link href="/docs">Docs</Link><Link href="/settings">Settings</Link></nav>
-        <p>Built by Aryan Kansagara. Independent project, not affiliated with Amazon.</p>
+        <p>Built by Aryan Kansagara.</p>
         <p className="muted small">Sample sellers are synthetic and labelled. Your reports are parsed in your browser and stored on this device unless you sign in to sync. Policy windows and fee rates are estimates; confirm them in Seller Central before filing.</p>
       </div>
     </footer>

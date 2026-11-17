@@ -69,7 +69,7 @@ export default function Report({ id }: { id: string }) {
           <tbody>{snaps.map(s => <tr key={s.id}><th scope="row">{s.label}</th><td className="num">{fmtMoney(s.found)}</td><td className="num">{fmtMoney(s.recovered)}</td><td className="num">{fmtMoney(s.missed)}</td></tr>)}</tbody>
         </table>
       </>}
-      <p className="muted tiny report-foot">Prepared with FBA Recover, an independent tool not affiliated with Amazon. Amounts are estimates; Amazon decides reimbursement values. {project.sampleId ? 'Synthetic sample data.' : ''}</p>
+      <p className="muted tiny report-foot">Prepared with FBA Recover. Amounts are estimates; Amazon decides reimbursement values. {project.sampleId ? 'Synthetic sample data.' : ''}</p>
     </article>
   )
 }
