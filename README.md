@@ -33,7 +33,10 @@ npm install
 npm run dev     # http://localhost:5173
 npm test        # engine tests
 npm run build
+npm run test:e2e   # Playwright (Chromium) against the production build
 ```
+
+The browser tests build the app, serve it with `vite preview` on port 4173 (set `E2E_PORT` to use another) and drive it signed out, with the network closed to everything but that server and the clock fixed to 12 Oct 2026 so claim deadlines are stable. They cover the sample seller's ranked worklist, case statuses, importing the ledger fixture, bad files, and state surviving a reload. Install the browser once with `npx playwright install chromium`. GitHub Actions runs install, build, unit tests and the browser tests on every pull request and push to `main`.
 
 Cloud sync needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env` (see `.env.example`). Without them the app runs in local-only mode.
 
