@@ -55,17 +55,31 @@ const ymd = (y: number, m: number, d: number) => {
   return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? `${y}-${pad(m)}-${pad(d)}` : ''
 }
 
+export type DateOrder = 'dmy' | 'mdy'
+export const ORDER_NAME: Record<DateOrder, string> = { dmy: 'day first', mdy: 'month first' }
+export const ORDER_EXAMPLE: Record<DateOrder, string> = { dmy: 'DD/MM/YYYY', mdy: 'MM/DD/YYYY' }
+
+const SLASH = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/
+const unquote = (raw: string) => raw.trim().replace(/^"|"$/g, '')
+
+/** The two readings of a slash date (D/M/YYYY or M/D/YYYY): the calendar day each order gives, '' where it is impossible. Null if not a slash date. */
+export function slashReadings(raw: string): { dmy: string; mdy: string } | null {
+  const m = unquote(raw).match(SLASH)
+  return m ? { dmy: ymd(+m[3], +m[2], +m[1]), mdy: ymd(+m[3], +m[1], +m[2]) } : null
+}
+
 /**
  * Seller Central dates come as ISO 8601 (ledger, reimbursements), "Jul 14, 2026 8:12:33 AM PDT" (date range report),
- * M/D/YYYY (spreadsheets) or D.M.YYYY (EU settlement files). Returns the calendar day as written, or '' if unreadable.
+ * D.M.YYYY (EU settlement files) or slash dates (spreadsheets), whose order is not in the text: pass the order decided for
+ * the column (see `validate`). Returns the calendar day as written, or '' if unreadable.
  */
-export function parseDate(raw: string): string {
-  const s = raw.trim().replace(/^"|"$/g, '')
+export function parseDate(raw: string, order: DateOrder = 'mdy'): string {
+  const s = unquote(raw)
   if (!s) return ''
   let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
   if (m) return ymd(+m[1], +m[2], +m[3])
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
-  if (m) return ymd(+m[3], +m[1], +m[2])
+  const slash = slashReadings(s)
+  if (slash) return slash[order]
   m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/)
   if (m) return ymd(+m[3], +m[2], +m[1])
   m = s.match(/^([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})/)
@@ -245,7 +259,127 @@ export function autoMap(kind: Kind, headers: string[]): Mapping {
 }
 
 export interface Issue { line: number; level: 'error' | 'warning'; message: string }
-export interface Validated { kind: Kind; data: Partial<Dataset>; count: number; issues: Issue[]; skipped: number; total: number; range: [string, string] | null }
+export interface Validated { kind: Kind; data: Partial<Dataset>; count: number; issues: Issue[]; skipped: number; total: number; range: [string, string] | null; dates: DateColumn[] }
+
+// ---------- Slash date order ----------
+
+/** A slash date seen in a column, with the day each order would give. */
+export interface DateSample { line: number; raw: string; dmy: string; mdy: string }
+
+/**
+ * How one date column's slash dates (31/10/2026 or 10/31/2026) are read. The order is decided once per file and column from all
+ * of its values, never per row: any value that is only possible one way (day above 12) settles it; if values contradict each
+ * other, or every value fits both orders and nothing else in the file says which, `order` stays null until the user chooses.
+ * Columns with no slash dates, or only ones that read the same either way (05/05/2026), are not listed.
+ */
+export interface DateColumn {
+  key: string
+  label: string
+  /** Index of the mapped column in the table, and its header text. */
+  col: number
+  header: string
+  /** How many slash dates are only possible day first, only possible month first, or fit both and differ. */
+  counts: { dmy: number; mdy: number; either: number }
+  /** First few of each, for the review (capped; see counts). */
+  samples: { dmy: DateSample[]; mdy: DateSample[]; either: DateSample[] }
+  /** The order the values or the rest of the row point to, if they agree. */
+  detected: DateOrder | null
+  /** What `detected` came from: 'values' (a date only valid one way), 'evidence' (another date column in the same rows), or '' if nothing decided. */
+  basis: 'values' | 'evidence' | ''
+  /** The header of the column that settled it, for 'evidence'. */
+  evidence?: string
+  /** The order used: the user's choice, else `detected`. Null means the import is blocked until one is chosen. */
+  order: DateOrder | null
+  chosen: boolean
+  /** Set when values contradict each other (some only day first, some only month first). */
+  conflict: boolean
+}
+
+const SAMPLE_CAP = 100
+const dayNumber = (iso: string) => Date.parse(iso + 'T00:00:00Z') / 864e5
+/** A date another column gives without any order question: ISO, month names or dotted. */
+const plainDate = (cell: string) => slashReadings(cell) ? '' : parseDate(cell)
+
+const cellOf = (row: string[], col: number | undefined, type: FieldType) => {
+  const cell = col === undefined ? '' : (row[col] ?? '').trim()
+  return type !== 'text' && NULLISH.test(cell) ? '' : cell
+}
+
+/** Another column whose dates, row by row, agree (within a day, for time zones) with exactly one reading of every ambiguous value. */
+function siblingEvidence(t: Table, header: number, col: number): { order: DateOrder; header: string } | null {
+  const rows: { row: string[]; r: { dmy: string; mdy: string } }[] = []
+  for (let i = header + 1; i < t.rows.length; i++) {
+    const r = slashReadings(t.rows[i][col] ?? '')
+    if (r && r.dmy && r.mdy && r.dmy !== r.mdy) rows.push({ row: t.rows[i], r })
+  }
+  const found = new Set<DateOrder>()
+  let name = ''
+  if (rows.length < 2) return null // one coincidence is too easy: ask instead
+  for (let j = 0; j < (t.rows[header]?.length ?? 0); j++) {
+    if (j === col) continue
+    let dmy = true, mdy = true
+    for (const { row, r } of rows) {
+      const other = plainDate(row[j] ?? '')
+      if (!other) { dmy = mdy = false; break }
+      dmy &&= Math.abs(dayNumber(r.dmy) - dayNumber(other)) <= 1
+      mdy &&= Math.abs(dayNumber(r.mdy) - dayNumber(other)) <= 1
+      if (!dmy && !mdy) break
+    }
+    if (dmy !== mdy) { found.add(dmy ? 'dmy' : 'mdy'); name ||= t.rows[header][j] }
+  }
+  return found.size === 1 ? { order: [...found][0], header: name } : null
+}
+
+/** Decides the slash-date order of every mapped date column. `chosen` holds the user's picks by column index. */
+export function analyzeDates(kind: Kind, t: Table, map: Mapping, header = 0, chosen: Record<number, DateOrder> = {}): DateColumn[] {
+  const out: DateColumn[] = []
+  for (const s of FIELDS[kind]) {
+    const col = map[s.key]
+    if (s.type !== 'date' || col === undefined) continue
+    const counts = { dmy: 0, mdy: 0, either: 0 }
+    const samples: DateColumn['samples'] = { dmy: [], mdy: [], either: [] }
+    for (let i = header + 1; i < t.rows.length; i++) {
+      const raw = cellOf(t.rows[i], col, 'date')
+      const r = raw ? slashReadings(raw) : null
+      if (!r || r.dmy === r.mdy) continue // not a slash date, impossible either way (reported per row), or the same either way
+      const g = r.dmy && r.mdy ? 'either' : r.dmy ? 'dmy' : 'mdy'
+      counts[g]++
+      if (samples[g].length < SAMPLE_CAP) samples[g].push({ line: t.lines[i], raw, dmy: r.dmy, mdy: r.mdy })
+    }
+    if (!counts.dmy && !counts.mdy && !counts.either) continue
+    const conflict = counts.dmy > 0 && counts.mdy > 0
+    let detected: DateOrder | null = null
+    let basis: DateColumn['basis'] = ''
+    let evidence: string | undefined
+    if (!conflict && counts.dmy) { detected = 'dmy'; basis = 'values' }
+    else if (!conflict && counts.mdy) { detected = 'mdy'; basis = 'values' }
+    else if (!conflict) {
+      const e = siblingEvidence(t, header, col)
+      if (e) { detected = e.order; basis = 'evidence'; evidence = e.header }
+    }
+    const pick = chosen[col]
+    out.push({ key: s.key, label: s.label, col, header: t.rows[header][col] ?? '', counts, samples, detected, basis, evidence, order: pick ?? detected, chosen: pick !== undefined, conflict })
+  }
+  return out
+}
+
+/** Line-numbered problems for columns that still need an order: nothing is imported, and nothing is guessed. */
+function dateBlockers(cols: DateColumn[]): Issue[] {
+  const issues: Issue[] = []
+  for (const c of cols.filter(c => c.order === null)) {
+    const name = c.header || c.label
+    if (c.conflict) {
+      const first = [...c.samples.dmy, ...c.samples.mdy].sort((a, b) => a.line - b.line)
+      issues.push({ line: first[0].line, level: 'error', message: `"${name}" mixes both date orders: ${c.counts.dmy} value${c.counts.dmy === 1 ? '' : 's'} only make sense day first, ${c.counts.mdy} only month first. Choose one order; rows that do not fit it are skipped.` })
+      for (const x of first) issues.push({ line: x.line, level: 'error', message: `"${x.raw}" can only be read ${x.dmy ? ORDER_NAME.dmy : ORDER_NAME.mdy} (${x.dmy || x.mdy}).` })
+    } else {
+      const x = c.samples.either[0]
+      issues.push({ line: x.line, level: 'error', message: `Every slash date in "${name}" fits both orders, and nothing else in the file says which: "${x.raw}" is ${x.dmy} day first or ${x.mdy} month first. Choose the order before importing.` })
+    }
+  }
+  return issues
+}
+
 
 type Rec = Record<string, string | number>
 
@@ -256,7 +390,7 @@ const NULLISH = /^(--|-|n\/a|null|none)$/i
 const toLb = (n: number, unit: string) => /gram|^g$/i.test(unit) ? n / 453.592 : /kilo|kg/i.test(unit) ? n * 2.20462 : /ounce|oz/i.test(unit) ? n / 16 : n
 
 /** Maps and validates the data rows below `header`. Line numbers are the file's own (1-based). */
-export function validate(kind: Kind, t: Table, map: Mapping, header = 0): Validated {
+export function validate(kind: Kind, t: Table, map: Mapping, header = 0, opts: { dateOrder?: Record<number, DateOrder> } = {}): Validated {
   const specs = FIELDS[kind]
   const issues: Issue[] = []
   const recs: { r: Rec; line: number }[] = []
@@ -264,8 +398,11 @@ export function validate(kind: Kind, t: Table, map: Mapping, header = 0): Valida
   const missing = specs.filter(s => s.required && map[s.key] === undefined)
   if (kind === 'txns' && map.amount === undefined && map.fbaFee === undefined) missing.push({ key: 'fees', label: 'amount or fba fees', type: 'num', aliases: [] })
   if (missing.length) {
-    return { kind, data: {}, count: 0, skipped: t.rows.length - header - 1, total: t.rows.length - header - 1, range: null, issues: [{ line: t.lines[header] ?? 1, level: 'error', message: `Map the required column${missing.length > 1 ? 's' : ''}: ${missing.map(m => m.label).join(', ')}.` }] }
+    return { kind, data: {}, count: 0, skipped: t.rows.length - header - 1, total: t.rows.length - header - 1, range: null, dates: [], issues: [{ line: t.lines[header] ?? 1, level: 'error', message: `Map the required column${missing.length > 1 ? 's' : ''}: ${missing.map(m => m.label).join(', ')}.` }] }
   }
+  const dates = analyzeDates(kind, t, map, header, opts.dateOrder)
+  const blockers = dateBlockers(dates)
+  if (blockers.length) return { kind, data: {}, count: 0, skipped: 0, total: t.rows.length - header - 1, range: null, issues: blockers, dates }
   for (let i = header + 1; i < t.rows.length; i++) {
     const row = t.rows[i], line = t.lines[i]
     // Settlement flat files open with a summary row (settlement id, period, total) that has no transaction type.
@@ -281,8 +418,10 @@ export function validate(kind: Kind, t: Table, map: Mapping, header = 0): Valida
       const raw = s.type !== 'text' && NULLISH.test(cell) ? '' : cell
       if (s.type === 'text') r[s.key] = raw
       else if (s.type === 'date') {
-        const d = raw ? parseDate(raw) : ''
-        if (raw && !d) bad ||= `${s.label} "${raw}" is not a date`
+        const order = dates.find(c => c.key === s.key)?.order ?? 'mdy' // no listed column: no slash date whose reading depends on it
+        const d = raw ? parseDate(raw, order) : ''
+        const other = slashReadings(raw)?.[order === 'dmy' ? 'mdy' : 'dmy']
+        if (raw && !d) bad ||= `${s.label} "${raw}" is not a date${other ? ` when read ${ORDER_NAME[order]} (it is ${other} read ${ORDER_NAME[order === 'dmy' ? 'mdy' : 'dmy']})` : ''}`
         r[s.key] = d
       } else {
         const n = raw ? parseNum(raw) : NaN
@@ -343,8 +482,8 @@ export function validate(kind: Kind, t: Table, map: Mapping, header = 0): Valida
     })
   }
   const rows = Object.values(data)[0] as { date?: string }[]
-  const dates = rows.map(x => x.date).filter((d): d is string => !!d).sort()
-  return { kind, data, count: rows.length, issues, skipped, total: t.rows.length - header - 1, range: dates.length ? [dates[0], dates[dates.length - 1]] : null }
+  const days = rows.map(x => x.date).filter((d): d is string => !!d).sort()
+  return { kind, data, count: rows.length, issues, skipped, total: t.rows.length - header - 1, range: days.length ? [days[0], days[days.length - 1]] : null, dates }
 }
 
 function canonEvent(e: string) {

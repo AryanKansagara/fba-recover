@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { autoMap, detect, FIELDS, KINDS, mergeData, parseCsv, reportCsv, validate, type Kind, type Mapping, type Table } from './engine/parse.ts'
+import { autoMap, detect, FIELDS, KINDS, mergeData, ORDER_EXAMPLE, ORDER_NAME, parseCsv, reportCsv, validate, type DateColumn, type DateOrder, type Kind, type Mapping, type Table } from './engine/parse.ts'
 import { DEFAULT_POLICY, POLICY_CHECKED, type Dataset, type Policy } from './engine/types.ts'
 import type { TabProps } from './Project.tsx'
 import { createBlankProject } from './projectData.ts'
@@ -7,7 +7,8 @@ import { putData, saveProject, uuid } from './store.ts'
 import { RAW_SYNC_LIMIT, useSync } from './sync.ts'
 import { ask, download, fmtDay, go, Link, toast } from './ui.tsx'
 
-interface Pending { id: string; name: string; kind: Kind | null; table: Table; header: number; map: Mapping }
+/** `dateOrder` holds the user's day-first / month-first choices by column index. */
+interface Pending { id: string; name: string; kind: Kind | null; table: Table; header: number; map: Mapping; dateOrder: Record<number, DateOrder> }
 
 
 const KEY_OF: Record<Kind, keyof Dataset> = { ledger: 'ledger', reimbursements: 'reimbursements', returns: 'returns', fees: 'fees', txns: 'txns', inbound: 'inbound', costs: 'costs' }
@@ -29,7 +30,7 @@ export default function DataTab({ project, ds, update, setPolicy }: TabProps) {
         const table = parseCsv(await f.text())
         if (table.rows.length < 2) { toast(`${f.name} has no data rows.`, { tone: 'error' }); continue }
         const { kind, header } = detect(table)
-        next.push({ id: uuid(), name: f.name, kind, table, header, map: kind ? autoMap(kind, table.rows[header]) : {} })
+        next.push({ id: uuid(), name: f.name, kind, table, header, map: kind ? autoMap(kind, table.rows[header]) : {}, dateOrder: {} })
       } catch (e) { toast(`${f.name}: ${e instanceof Error ? e.message : 'could not be read'}`, { tone: 'error' }) }
     }
     setPending(p => [...p, ...next])
@@ -102,16 +103,17 @@ export default function DataTab({ project, ds, update, setPolicy }: TabProps) {
 }
 
 function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange(p: Pending): void; onCancel(): void; onCommit(p: Pending, data: Partial<Dataset>, rows: number, skipped: number, range: [string, string] | null): Promise<void> }) {
-  const v = useMemo(() => p.kind ? validate(p.kind, p.table, p.map, p.header) : null, [p])
+  const v = useMemo(() => p.kind ? validate(p.kind, p.table, p.map, p.header, { dateOrder: p.dateOrder }) : null, [p])
   const [busy, setBusy] = useState(false)
   const headers = p.table.rows[p.header] ?? []
   const errors = v?.issues.filter(i => i.level === 'error') ?? []
+  const waiting = !!v?.dates.some(c => c.order === null)
   return (
     <div className="panel pending">
       <div className="panel-head">
         <h2 className="break">{p.name}</h2>
         <label className="row gap-sm small">Report
-          <select value={p.kind ?? ''} style={{ width: 'auto' }} onChange={e => { const k = (e.target.value || null) as Kind | null; onChange({ ...p, kind: k, map: k ? autoMap(k, headers) : {} }) }}>
+          <select value={p.kind ?? ''} style={{ width: 'auto' }} onChange={e => { const k = (e.target.value || null) as Kind | null; onChange({ ...p, kind: k, map: k ? autoMap(k, headers) : {}, dateOrder: {} }) }}>
             <option value="">Choose…</option>
             {(Object.keys(KINDS) as Kind[]).map(k => <option key={k} value={k}>{KINDS[k].label}</option>)}
           </select>
@@ -120,7 +122,7 @@ function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
       {!p.kind ? <p className="warn-text small">Could not tell which report this is from its header row ({headers.slice(0, 6).join(', ')}…). Choose it above.</p> : (
         <>
           <p className="muted small">Detected <b>{KINDS[p.kind].label}</b>{p.header ? `, header on line ${p.table.lines[p.header]} (preamble skipped)` : ''}. Check the mapping; required fields are starred.</p>
-          <details className="mapping" open={errors.length > 0 && v!.count === 0}>
+          <details className="mapping" open={errors.length > 0 && v!.count === 0 && !waiting}>
             <summary className="small strong">Column mapping</summary>
             <div className="map-grid">
               {FIELDS[p.kind].map(f => (
@@ -133,13 +135,14 @@ function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
               ))}
             </div>
           </details>
+          {v!.dates.map(c => <DateOrderBox key={c.col} c={c} onPick={o => onChange({ ...p, dateOrder: { ...p.dateOrder, [c.col]: o } })} onClear={() => onChange({ ...p, dateOrder: Object.fromEntries(Object.entries(p.dateOrder).filter(([k]) => Number(k) !== c.col)) })} />)}
           <h3 className="small strong" style={{ marginTop: 10 }}>Validation</h3>
-          <p className="small">
+          {waiting ? <p className="small"><strong className="warn-text">Waiting for the date order</strong> before reading {v!.total.toLocaleString()} rows.</p> : <p className="small">
             <strong className="good-text">{v!.count.toLocaleString()} {KINDS[p.kind].noun} ready</strong> from {v!.total.toLocaleString()} rows
             {v!.skipped > 0 && <>, <strong className="error">{v!.skipped} skipped</strong></>}
             {v!.issues.length > errors.length && <>, {v!.issues.length - errors.length} warnings</>}
             {v!.range && <>. Dates {fmtDay(v!.range[0])} to {fmtDay(v!.range[1])}</>}.
-          </p>
+          </p>}
           {v!.issues.length > 0 && (
             <div className="issues" role="log" aria-label="Validation issues">
               {v!.issues.slice(0, 200).map((i, k) => <div key={k} className={i.level === 'error' ? 'error-row' : ''}><span className="ln">line {i.line}</span><span>{i.message}</span></div>)}
@@ -152,6 +155,34 @@ function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
         <button type="button" className="btn primary" disabled={!v?.count || busy} onClick={async () => { setBusy(true); await onCommit(p, v!.data, v!.count, v!.skipped, v!.range); setBusy(false) }}>Import {v?.count.toLocaleString() ?? ''} {p.kind ? KINDS[p.kind].noun : 'rows'}</button>
         <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
       </div>
+    </div>
+  )
+}
+
+/** Shows which order a column's slash dates were read in, why, and lets the user override it. Blocks the import while none is chosen. */
+function DateOrderBox({ c, onPick, onClear }: { c: DateColumn; onPick(o: DateOrder): void; onClear(): void }) {
+  const name = c.header || c.label
+  const x = c.samples.either[0] ?? c.samples.dmy[0] ?? c.samples.mdy[0]
+  const orders: DateOrder[] = ['dmy', 'mdy']
+  const why = c.chosen
+    ? <>You chose {ORDER_NAME[c.order!]}. {c.detected ? <>The file reads {ORDER_NAME[c.detected]}{c.basis === 'evidence' ? <>, matching the &ldquo;{c.evidence}&rdquo; column</> : <>: {c.samples[c.detected][0] ? `${c.samples[c.detected][0].raw} on line ${c.samples[c.detected][0].line} fits only that order` : ''}</>}.</> : c.conflict ? <>The file mixes both orders.</> : <>Nothing in the file decides it.</>} Any rows that do not fit are skipped and listed below.</>
+    : c.order === null
+      ? c.conflict
+        ? <><strong>The dates in &ldquo;{name}&rdquo; use both orders.</strong> {c.counts.dmy} value{c.counts.dmy === 1 ? '' : 's'} only make sense day first (line {c.samples.dmy[0].line}: {c.samples.dmy[0].raw}) and {c.counts.mdy} only month first (line {c.samples.mdy[0].line}: {c.samples.mdy[0].raw}). Nothing is mixed: pick one order, and the rows that do not fit it are skipped with their line numbers.</>
+        : <><strong>The dates in &ldquo;{name}&rdquo; can be read two ways.</strong> Every slash date fits both orders, and nothing else in the file says which. {x.raw} on line {x.line} is {fmtDay(x.dmy)} day first or {fmtDay(x.mdy)} month first. Pick how this file writes dates before importing.</>
+      : c.basis === 'evidence'
+        ? <>Dates in &ldquo;{name}&rdquo; are read {ORDER_NAME[c.order]} ({ORDER_EXAMPLE[c.order]}): on every row that could go either way, that is the reading that matches the &ldquo;{c.evidence}&rdquo; column.</>
+        : <>Dates in &ldquo;{name}&rdquo; are read {ORDER_NAME[c.order]} ({ORDER_EXAMPLE[c.order]}): {c.samples[c.order][0].raw} on line {c.samples[c.order][0].line} can only be read that way{c.counts[c.order] > 1 ? `, and so can ${(c.counts[c.order] - 1).toLocaleString()} more` : ''}.</>
+  return (
+    <div className={`banner${c.order === null ? ' warn' : ''}`} role={c.order === null ? 'alert' : undefined} style={{ marginTop: 10, marginBottom: 6 }}>
+      <span className="small" style={{ flex: '1 1 320px' }}>{why}</span>
+      <span className="row gap-sm wrap">
+        <span className="seg-control" role="radiogroup" aria-label={`Date order for ${name}`}>
+          {orders.map(o => <button key={o} type="button" role="radio" aria-checked={c.order === o} className={c.order === o ? 'on' : ''} onClick={() => onPick(o)}>{ORDER_NAME[o][0].toUpperCase() + ORDER_NAME[o].slice(1)} ({ORDER_EXAMPLE[o]})</button>)}
+        </span>
+        {c.chosen && c.detected && <button type="button" className="linkish small" onClick={onClear}>Use detected</button>}
+        {c.chosen && !c.detected && <button type="button" className="linkish small" onClick={onClear}>Clear choice</button>}
+      </span>
     </div>
   )
 }

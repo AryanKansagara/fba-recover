@@ -10,8 +10,8 @@ FBA reimbursement windows are short (60 days for units lost or damaged in a fulf
 
 ## Features
 
-- **Import** the Inventory Ledger (detailed view), Reimbursements, FBA customer returns, Fee Preview, Settlement (Flat File V2 or the date range transaction report), Shipment items, and an optional COGS file. Report detection, flexible column mapping and a validation report with line numbers. Overlapping exports do not double count.
-- **Engine** (plain TypeScript, 38 tests, including one fixture per real Seller Central / SP-API report layout): per-FNSKU ledger reconciliation by reason code with found adjustments offsetting the oldest losses; reimbursement matching by date proximity (cash and inventory, reversals); refunds never returned; inbound shortfalls; reimbursements paid below cost; a dated, editable US fee table (size tier from dimensions and weight, price bands, surcharge) that flags re-measurements and dates the change; fees charged on units not received.
+- **Import** the Inventory Ledger (detailed view), Reimbursements, FBA customer returns, Fee Preview, Settlement (Flat File V2 or the date range transaction report), Shipment items, and an optional COGS file. Report detection, flexible column mapping, day-first or month-first dates detected per file (with an override) and a validation report with line numbers. Overlapping exports do not double count.
+- **Engine** (plain TypeScript, 55 tests, including one fixture per real Seller Central / SP-API report layout): per-FNSKU ledger reconciliation by reason code with found adjustments offsetting the oldest losses; reimbursement matching by date proximity (cash and inventory, reversals); refunds never returned; inbound shortfalls; reimbursements paid below cost; a dated, editable US fee table (size tier from dimensions and weight, price bands, surcharge) that flags re-measurements and dates the change; fees charged on units not received.
 - **Actions:** a case worklist ranked by dollars per day left, copy-ready case text with the FNSKU, dates, ledger references and policy reason, a status tracker (draft, filed, case ID, reimbursed, denied), a deadline calendar, a printable monthly recovery report and a CSV export.
 - **History:** monthly snapshots with a compare view (found against recovered).
 - **Hero:** a live per-SKU ledger Sankey (received to sold, on hand, lost; lost to found, reimbursed, unreimbursed) running on the real engine, with a deadline countdown.
@@ -23,7 +23,7 @@ Claim windows and fee rates are dated estimates (checked November 2026) and edit
 ## Known gaps
 
 - Fee table values come from public summaries that do not all agree; check a few SKUs against the Revenue Calculator.
-- Dates written day-first (31/10/2026, some EU exports) are not detected; only US month-first and ISO dates are read for slash dates.
+- Slash dates are read day first or month first, decided once per file and date column from all its values (see Docs, Date formats). Two-digit years (31/10/26) and dashes (31-10-2026) are not read.
 - The SP-API inbound shipment items export has no date column; map one by hand (or use the Seller Central shipment export).
 
 ## Run locally
@@ -36,7 +36,7 @@ npm run build
 npm run test:e2e   # Playwright (Chromium) against the production build
 ```
 
-The browser tests build the app, serve it with `vite preview` on port 4173 (set `E2E_PORT` to use another) and drive it signed out, with the network closed to everything but that server and the clock fixed to 12 Oct 2026 so claim deadlines are stable. They cover the sample seller's ranked worklist, case statuses, importing the ledger fixture, bad files, and state surviving a reload. Install the browser once with `npx playwright install chromium`. GitHub Actions runs install, build, unit tests and the browser tests on every pull request and push to `main`.
+The browser tests build the app, serve it with `vite preview` on port 4173 (set `E2E_PORT` to use another) and drive it signed out, with the network closed to everything but that server and the clock fixed to 12 Oct 2026 so claim deadlines are stable. They cover the sample seller's ranked worklist, case statuses, importing the ledger fixture, day-first and ambiguous dates, bad files, and state surviving a reload. Install the browser once with `npx playwright install chromium`. GitHub Actions runs install, build, unit tests and the browser tests on every pull request and push to `main`.
 
 Cloud sync needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env` (see `.env.example`). Without them the app runs in local-only mode.
 
