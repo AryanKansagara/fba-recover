@@ -58,6 +58,16 @@ export default function Docs() {
       ))}
       <h3 id="formats">Layouts the importer is tested against</h3>
       <p className="small">Checked 13 Nov 2026 against the column lists of the SP-API report types (<span className="mono">GET_LEDGER_DETAIL_VIEW_DATA</span>, <span className="mono">GET_FBA_REIMBURSEMENTS_DATA</span>, <span className="mono">GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA</span>, <span className="mono">GET_FBA_ESTIMATED_FBA_FEES_TXT_DATA</span>, <span className="mono">GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2</span>) as published in the open-source Airbyte Amazon Seller Partner connector (<a href="https://github.com/airbytehq/airbyte/tree/master/airbyte-integrations/connectors/source-amazon-seller-partner">github.com/airbytehq/airbyte</a>), plus the Seller Central date range transaction report. The test suite carries one file per layout: tab-separated reports, quoted CSV, the seven-line date range preamble, the settlement summary row, <span className="mono">--</span> placeholders in the Fee Preview, millimetre and kilogram units (EU), and camelCase headers from API exports. Values in those fixtures are invented.</p>
+      <h3 id="dates">Date formats: day first or month first</h3>
+      <p className="small">ISO dates (2026-10-31), month names (Oct 31, 2026) and dotted dates (31.10.2026, always day first) are read as written. A slash date is not: <span className="mono">05/10/2026</span> is 5 October in a day-first export and 10 May in a US one, which moves a claim deadline by months. So the importer decides the order once per file and date column, from all of its values, and shows it in the review:</p>
+      <ul className="small">
+        <li>A value that only works one way settles the whole column: <span className="mono">31/10/2026</span> can only be day first, <span className="mono">10/31/2026</span> only month first. Every row is then read that way.</li>
+        <li>If the column has both kinds, the file contradicts itself. Nothing is imported until you choose an order, and rows that do not fit it are skipped and listed by line number. Rows are never read in mixed orders.</li>
+        <li>If every value fits both orders (all days are 12 or below), another date column in the same rows can decide, such as the ledger&rsquo;s <span className="mono">Date and Time</span>, when it matches one reading on every row. Otherwise the review asks you to pick day first or month first before it will import. It does not guess.</li>
+        <li>You can override the detected order in the review. Rows that cannot be read that way are skipped and listed.</li>
+        <li>Dates are stored as calendar days, so claim deadlines and the check that stops overlapping exports double counting use the order you imported with.</li>
+      </ul>
+      <p className="small muted">Not read: two-digit years (31/10/26) and dashes between day, month and year (31-10-2026). The importer does not assume a marketplace or browser language means a date order; only the file&rsquo;s own values count.</p>
       <Code label="cost file example (CSV)" code={'sku,unit_cost,longest_side,median_side,shortest_side,weight_lb\nHL-BOARD-WAL,9.40,14.8,10.9,0.7,0.94\nHL-THROW-OAT,14.50,14,11,5,2.3\n'} />
 
       <h2 id="windows">Claim windows</h2>
